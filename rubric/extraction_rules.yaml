@@ -1,0 +1,53 @@
+# ── Extraction Thresholds ──
+thresholds:
+  char_density_min: 500
+  image_area_max: 0.5
+  min_confidence: 0.65
+  max_escalation_retries: 2
+
+# ── Cost Tiers (per page) ──
+cost_tiers:
+  strategy_a: 0.0001
+  strategy_b: 0.005
+  strategy_c: 0.020
+
+# ── Domain Classification (Swappable Strategy) ──
+# Rubric Compliance: Onboard new domains by editing this file only
+domain_classification:
+  keywords:
+    financial:
+      - "balance sheet"
+      - "revenue"
+      - "ebitda"
+      - "audit"
+      - "income statement"
+      - "cash flow"
+    legal:
+      - "plaintiff"
+      - "defendant"
+      - "herein"
+      - "contract"
+      - "liability"
+      - "jurisdiction"
+    technical:
+      - "architecture"
+      - "api"
+      - "deployment"
+      - "specification"
+      - "infrastructure"
+      - "microservice"
+    medical:
+      - "diagnosis"
+      - "patient"
+      - "prescription"
+      - "clinical"
+      - "treatment"
+      - "protocol"
+
+# ── Chunking Constitution ──
+chunking_rules:
+  rule_1: "token_count <= 512"
+  rule_2: "never split table rows"
+  rule_3: "keep fig captions with parent"
+  rule_4: "keep lists intact"
+  rule_5: "propagate section headers"
