@@ -1,0 +1,67 @@
+Metadata-Version: 2.4
+Name: document-intelligence-refinery
+Version: 2.0.0
+Summary: Agentic Pipeline for Unstructured Document Extraction at Enterprise Scale
+Author-email: FDE Program <fde@trp1.com>
+License: MIT
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.5.0
+Requires-Dist: pdfplumber>=0.10.0
+Requires-Dist: pymupdf>=1.23.0
+Requires-Dist: docling>=2.0.0
+Requires-Dist: openai>=1.10.0
+Requires-Dist: pyyaml>=6.0.1
+Requires-Dist: pytest>=7.4.0
+Requires-Dist: spacy>=3.7.0
+Requires-Dist: chromadb>=0.4.0
+Requires-Dist: sqlite-utils>=3.36
+Requires-Dist: presidio-analyzer>=2.2.0
+Requires-Dist: presidio-anonymizer>=2.2.0
+Requires-Dist: langdetect>=1.0.9
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: cryptography>=41.0.0
+Provides-Extra: dev
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.7.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.1.0; extra == "dev"
+
+# The Document Intelligence Refinery (v2.0)
+
+Engineering Agentic Pipelines for Unstructured Document Extraction at Enterprise Scale.
+
+## Overview
+
+This repository implements a **5-stage agentic pipeline** that ingests heterogeneous documents (PDF, DOCX, Images) and emits structured, queryable, spatially-indexed knowledge. It features a **Constraint Enforcement System (CES)** with confidence-gated escalation strategies.
+
+## Architecture
+
+| Stage | Agent             | Purpose                                             |
+| ----- | ----------------- | --------------------------------------------------- |
+| 1     | Triage Agent      | Document profiling (origin, layout, domain)         |
+| 2     | Extraction Layer  | Multi-strategy (Fast/Layout/Vision) with escalation |
+| 3     | Chunking Engine   | Semantic LDU generation with 5 constitutional rules |
+| 4     | PageIndex Builder | Hierarchical navigation tree                        |
+| 5     | Query Agent       | RAG + SQL + Provenance interface                    |
+
+## Quick Start
+
+### 1. Install Dependencies
+
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install package
+pip install -e .
+
+# Download spaCy model
+python -m spacy download en_core_web_sm
+```

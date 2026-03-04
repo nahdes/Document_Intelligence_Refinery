@@ -1,0 +1,2 @@
+[console_scripts]
+refinery = src.agents.extractor:main
