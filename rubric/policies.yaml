@@ -1,0 +1,66 @@
+# rubric/policies.yaml — Master policy for the Document Intelligence Refinery
+# All values validated by RefineryPolicy Pydantic model at startup.
+# No code changes needed to adjust behaviour — edit this file only.
+
+# ── Cost controls ─────────────────────────────────────────────────────────────
+max_cost_usd: 0.50
+
+# Per-page costs — must satisfy A < B < C
+strategy_a_cost_per_page: 0.0001   # Fast: pdfplumber
+strategy_b_cost_per_page: 0.005    # Layout: Docling
+strategy_c_cost_per_page: 0.02     # Vision: VLM (Gemini Flash)
+
+# ── Document limits ───────────────────────────────────────────────────────────
+max_pages: 500
+max_file_size_mb: 100.0
+
+# ── Quality gates ─────────────────────────────────────────────────────────────
+min_confidence: 0.65
+min_language_confidence: 0.60
+max_escalation_retries: 2
+
+# ── Security ──────────────────────────────────────────────────────────────────
+pii_redaction_enabled: true
+pii_entities:
+  - PERSON
+  - EMAIL_ADDRESS
+  - PHONE_NUMBER
+  - CREDIT_CARD
+  - US_SSN
+  - IBAN_CODE
+  - IP_ADDRESS
+  - LOCATION
+  - DATE_TIME
+  - NRP
+
+malware_scan_enabled: true
+encryption_at_rest: true
+
+# ── Language allowlist ────────────────────────────────────────────────────────
+allowed_languages:
+  - en   # English
+  - am   # Amharic
+  - fr   # French
+  - de   # German
+  - ar   # Arabic
+  - zh   # Chinese
+  - es   # Spanish
+  - it   # Italian
+  - pt   # Portuguese
+
+# ── Chunking constitution ─────────────────────────────────────────────────────
+chunk_rules:
+  max_tokens: 512
+  never_split_table_rows: true
+  keep_figure_captions_with_parent: true
+  keep_lists_intact: true
+  propagate_section_headers: true
+  resolve_cross_references: true
+
+# ── Extraction thresholds (used by TriageAgent strategy router) ───────────────
+extraction_thresholds:
+  fast_text_min_chars_per_page: 100.0
+  fast_text_max_image_area_ratio: 0.50
+  strategy_a_confidence_floor: 0.70
+  strategy_b_confidence_floor: 0.60
+  strategy_c_confidence_floor: 0.50
