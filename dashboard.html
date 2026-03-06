@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Document Intelligence Refinery</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: #ffffff0f;
+    --border-hi: #ffffff1a;
+    --accent: #7c6af7;
+    --accent2: #4ecca3;
+    --accent3: #f7c26a;
+    --accent4: #f76a8a;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --display: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 14px; line-height: 1.6;
+    min-height: 100vh; overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none; z-index: 0;
+  }
+  body::after {
+    content: ''; position: fixed; top: -40%; left: -20%;
+    width: 80%; height: 80%;
+    background: radial-gradient(ellipse, #7c6af71a 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px; border-bottom: 1px solid var(--border);
+    background: #0a0a0fcc; backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo-icon { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .logo span { color: var(--muted); font-weight: 400; }
+  .header-badges { display: flex; align-items: center; gap: 10px; }
+  .badge { font-family: var(--mono); font-size: 11px; padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border-hi); color: var(--muted); }
+  .badge.ok { color: var(--accent2); border-color: var(--accent2)40; background: var(--accent2)10; }
+  .badge.warn { color: var(--accent3); border-color: var(--accent3)40; }
+  .badge.err { color: var(--accent4); border-color: var(--accent4)40; }
+
+  /* ── Layout ── */
+  main { display: flex; flex: 1; }
+
+  /* ── Sidebar ── */
+  aside {
+    width: 290px; min-width: 290px; border-right: 1px solid var(--border);
+    padding: 24px 18px; display: flex; flex-direction: column; gap: 20px;
+    background: #0a0a0f88;
+  }
+  .section-label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1.5px dashed var(--border-hi); border-radius: 12px; padding: 24px 16px;
+    text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface);
+    position: relative; overflow: hidden;
+  }
+  .upload-zone::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, var(--accent)08, transparent); opacity: 0; transition: opacity 0.3s; }
+  .upload-zone:hover { border-color: var(--accent); }
+  .upload-zone:hover::before { opacity: 1; }
+  .upload-zone.drag-over { border-color: var(--accent2); background: var(--surface2); }
+  .upload-zone h3 { font-family: var(--display); font-size: 13px; font-weight: 600; margin: 8px 0 4px; }
+  .upload-zone p { color: var(--muted); font-size: 11px; }
+  .upload-zone input { display: none; }
+  .upload-icon { font-size: 26px; }
+
+  .file-chip {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px;
+    margin-top: 8px;
+  }
+  .file-chip-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-chip-size { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+
+  /* Pipeline steps */
+  .pipeline-steps { display: flex; flex-direction: column; gap: 5px; }
+  .step {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-radius: 8px; border: 1px solid transparent; font-size: 12px; transition: all 0.2s;
+  }
+  .step-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .step.idle { color: var(--muted); }
+  .step.running { border-color: var(--accent); background: var(--accent)0d; color: var(--text); }
+  .step.running .step-dot { background: var(--accent); animation: blink 1s infinite; }
+  .step.done { color: var(--accent2); }
+  .step.done .step-dot { background: var(--accent2); }
+  .step.error { color: var(--accent4); }
+  .step.error .step-dot { background: var(--accent4); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  /* Buttons */
+  .run-btn {
+    width: 100%; padding: 12px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), #5a4fd4); color: #fff;
+    font-family: var(--display); font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 0.2px;
+  }
+  .run-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 24px var(--accent)40; }
+  .run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Query */
+  .query-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .query-wrap textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--border-hi);
+    border-radius: 8px; padding: 10px 12px; color: var(--text);
+    font-family: var(--sans); font-size: 13px; resize: vertical; outline: none;
+    transition: border-color 0.2s; min-height: 72px;
+  }
+  .query-wrap textarea:focus { border-color: var(--accent); }
+  .query-wrap textarea:disabled { opacity: 0.4; }
+  .ask-btn {
+    padding: 9px 14px; background: var(--surface2); border: 1px solid var(--border-hi);
+    border-radius: 8px; color: var(--text); font-size: 13px; cursor: pointer;
+    transition: all 0.2s; font-family: var(--sans); width: 100%; text-align: left;
+  }
+  .ask-btn:hover:not(:disabled) { border-color: var(--accent2); color: var(--accent2); }
+  .ask-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* Server status */
+  .server-status { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .status-dot.ok { background: var(--accent2); box-shadow: 0 0 6px var(--accent2)80; }
+  .status-dot.err { background: var(--accent4); }
+
+  /* ── Content ── */
+  .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+  .tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 24px; background: #0a0a0f88; }
+  .tab { padding: 14px 16px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--muted); transition: all 0.2s; background: none; border-top: none; border-left: none; border-right: none; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-badge { display: inline-block; background: var(--accent)25; color: var(--accent); border-radius: 10px; padding: 1px 6px; font-size: 10px; font-family: var(--mono); margin-left: 6px; }
+
+  .tab-pane { flex: 1; overflow-y: auto; padding: 24px; display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ── Cards & grids ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; position: relative; overflow: hidden;
+    animation: fadeUp 0.35s ease both;
+  }
+  .stat-card:nth-child(2){animation-delay:.06s} .stat-card:nth-child(3){animation-delay:.12s} .stat-card:nth-child(4){animation-delay:.18s}
+  .stat-card::after { content: attr(data-icon); position: absolute; right: 14px; top: 14px; font-size: 18px; opacity: 0.25; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+  .stat-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .stat-value { font-family: var(--display); font-size: 26px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .accent-purple .stat-value { color: var(--accent); }
+  .accent-green .stat-value { color: var(--accent2); }
+  .accent-amber .stat-value { color: var(--accent3); }
+  .accent-pink .stat-value { color: var(--accent4); }
+
+  .section-title { font-family: var(--display); font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+  .profile-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .profile-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); }
+  .profile-row:last-child { border: none; }
+  .profile-key { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .profile-val { font-size: 12px; font-weight: 500; max-width: 55%; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .pill { padding: 2px 7px; border-radius: 20px; font-size: 10px; font-family: var(--mono); font-weight: 500; }
+  .pill-purple { background: var(--accent)20; color: var(--accent); border: 1px solid var(--accent)30; }
+  .pill-green  { background: var(--accent2)20; color: var(--accent2); border: 1px solid var(--accent2)30; }
+  .pill-amber  { background: var(--accent3)20; color: var(--accent3); border: 1px solid var(--accent3)30; }
+  .pill-pink   { background: var(--accent4)20; color: var(--accent4); border: 1px solid var(--accent4)30; }
+
+  /* cost bar */
+  .cost-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 22px; }
+  .cost-bar-track { background: var(--surface2); border-radius: 4px; height: 8px; overflow: hidden; margin: 8px 0 6px; }
+  .cost-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 1.2s ease; }
+  .cost-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  /* LDU list */
+  .ldu-list { display: flex; flex-direction: column; gap: 7px; }
+  .ldu-item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; transition: all 0.15s;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start;
+    animation: fadeUp 0.25s ease both;
+  }
+  .ldu-item:hover { border-color: var(--border-hi); background: var(--surface2); }
+  .type-badge { padding: 2px 7px; border-radius: 4px; font-family: var(--mono); font-size: 10px; font-weight: 500; text-transform: uppercase; white-space: nowrap; }
+  .t-text   { background: #7c6af720; color: var(--accent); }
+  .t-header { background: #4ecca320; color: var(--accent2); }
+  .t-table  { background: #f7c26a20; color: var(--accent3); }
+  .t-figure { background: #f76a8a20; color: var(--accent4); }
+  .t-list   { background: #ffffff10; color: var(--muted); }
+  .ldu-body { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .ldu-body strong { color: var(--text); font-weight: 500; display: block; margin-bottom: 2px; font-size: 11px; }
+  .ldu-meta { font-family: var(--mono); font-size: 10px; color: var(--muted); text-align: right; white-space: nowrap; line-height: 1.8; }
+  .pii-tag { color: var(--accent4); font-size: 9px; }
+
+  /* Index */
+  .index-list { display: flex; flex-direction: column; gap: 8px; }
+  .index-node { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; animation: fadeUp 0.25s ease both; }
+  .index-node-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+  .index-node-title { font-family: var(--display); font-size: 13px; font-weight: 600; }
+  .index-node-meta { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .index-node-summary { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .entity-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .entity-tag { padding: 2px 7px; border-radius: 4px; font-size: 10px; font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border-hi); color: var(--muted); }
+
+  /* Query results */
+  .query-result { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 14px; animation: fadeUp 0.3s ease; }
+  .query-q { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .query-answer { font-size: 13px; line-height: 1.7; }
+  .sources { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .source-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .source-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 11px; }
+  .source-excerpt { font-size: 12px; color: var(--muted); font-style: italic; }
+
+  /* Audit */
+  .audit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .chain-indicator { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; }
+  .chain-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .audit-list { display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); font-size: 12px; }
+  .audit-row { display: grid; grid-template-columns: 160px 1fr; gap: 16px; padding: 7px 12px; border-radius: 6px; border: 1px solid transparent; transition: background 0.15s; align-items: start; }
+  .audit-row:hover { background: var(--surface2); border-color: var(--border); }
+  .audit-ts { color: var(--muted); font-size: 11px; }
+  .audit-ev { }
+  .ev-pass  { color: var(--accent2); }
+  .ev-block { color: var(--accent4); }
+  .ev-warn  { color: var(--accent3); }
+  .ev-info  { color: var(--accent); }
+  .audit-payload { color: var(--muted); font-size: 10px; margin-top: 2px; }
+
+  /* Empty state */
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 280px; color: var(--muted); text-align: center; gap: 10px; }
+  .empty-icon { font-size: 44px; opacity: 0.25; }
+  .empty h3 { font-family: var(--display); font-size: 15px; color: var(--muted); }
+  .empty p { font-size: 12px; max-width: 220px; line-height: 1.5; }
+
+  /* Error banner */
+  .error-banner { background: var(--accent4)15; border: 1px solid var(--accent4)40; border-radius: 8px; padding: 12px 16px; font-size: 12px; color: var(--accent4); margin-bottom: 16px; }
+
+  /* Spinner */
+  .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--accent)30; border-top-color: var(--accent); border-radius: 50%; animation: rot 0.65s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚗️</div>
+    Document Intelligence <span>Refinery</span>
+  </div>
+  <div class="header-badges">
+    <span class="badge" id="chainBadge">⬡ CHAIN —</span>
+    <span class="badge" id="serverBadge">● SERVER —</span>
+  </div>
+</header>
+
+<main>
+
+<!-- ── Sidebar ── -->
+<aside>
+
+  <div>
+    <div class="section-label">Document</div>
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileIn').click()">
+      <div class="upload-icon">📄</div>
+      <h3>Drop PDF here</h3>
+      <p>or click to browse</p>
+      <input type="file" id="fileIn" accept=".pdf"/>
+    </div>
+    <div id="fileChip" style="display:none"></div>
+  </div>
+
+  <div>
+    <div class="section-label">Pipeline</div>
+    <div class="pipeline-steps">
+      <div class="step idle" id="s-triage"><div class="step-dot"></div>1 · Triage</div>
+      <div class="step idle" id="s-extract"><div class="step-dot"></div>2 · Extract</div>
+      <div class="step idle" id="s-chunk"><div class="step-dot"></div>3 · Chunk</div>
+      <div class="step idle" id="s-index"><div class="step-dot"></div>4 · Index</div>
+      <div class="step idle" id="s-ready"><div class="step-dot"></div>5 · Ready</div>
+    </div>
+  </div>
+
+  <button class="run-btn" id="runBtn" onclick="runPipeline()" disabled>▶ Run Pipeline</button>
+
+  <div>
+    <div class="section-label">Query</div>
+    <div class="query-wrap">
+      <textarea id="queryTxt" placeholder="What are the key findings?" disabled></textarea>
+      <button class="ask-btn" id="askBtn" onclick="submitQuery()" disabled>Ask Document →</button>
+    </div>
+  </div>
+
+  <div style="margin-top:auto">
+    <div class="server-status">
+      <div class="status-dot" id="srvDot"></div>
+      <span id="srvLabel">Checking server…</span>
+    </div>
+  </div>
+
+</aside>
+
+<!-- ── Content ── -->
+<div class="content">
+  <div class="tabs">
+    <button class="tab active" onclick="tab('overview')">Overview</button>
+    <button class="tab" onclick="tab('chunks')">Chunks <span class="tab-badge" id="tbChunks"></span></button>
+    <button class="tab" onclick="tab('index')">Page Index <span class="tab-badge" id="tbIndex"></span></button>
+    <button class="tab" onclick="tab('results')">Query Results <span class="tab-badge" id="tbResults"></span></button>
+    <button class="tab" onclick="tab('audit')">Audit Trail <span class="tab-badge" id="tbAudit"></span></button>
+  </div>
+
+  <!-- Overview -->
+  <div class="tab-pane active" id="pane-overview">
+    <div class="empty" id="ov-empty">
+      <div class="empty-icon">⚗️</div>
+      <h3>No document loaded</h3>
+      <p>Upload a PDF and click Run Pipeline to see results here.</p>
+    </div>
+    <div id="ov-data" style="display:none">
+      <div id="errBanner" style="display:none" class="error-banner"></div>
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="section-title">Document Profile</div>
+      <div class="profile-grid" id="profileGrid"></div>
+      <div class="section-title">Extraction Cost</div>
+      <div class="cost-wrap" id="costWrap"></div>
+    </div>
+  </div>
+
+  <!-- Chunks -->
+  <div class="tab-pane" id="pane-chunks">
+    <div class="empty" id="ch-empty">
+      <div class="empty-icon">🧱</div>
+      <h3>No chunks yet</h3>
+      <p>Run the pipeline to see semantic LDUs here.</p>
+    </div>
+    <div id="ch-data" style="display:none">
+      <div class="ldu-list" id="lduList"></div>
+    </div>
+  </div>
+
+  <!-- Index -->
+  <div class="tab-pane" id="pane-index">
+    <div class="empty" id="ix-empty">
+      <div class="empty-icon">📑</div>
+      <h3>No index yet</h3>
+      <p>Run the pipeline to build the page index.</p>
+    </div>
+    <div id="ix-data" style="display:none">
+      <div class="index-list" id="indexList"></div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="tab-pane" id="pane-results">
+    <div class="empty" id="re-empty">
+      <div class="empty-icon">💬</div>
+      <h3>No queries yet</h3>
+      <p>Ask a question about your document in the sidebar.</p>
+    </div>
+    <div id="re-data" style="display:none">
+      <div id="resultsList"></div>
+    </div>
+  </div>
+
+  <!-- Audit -->
+  <div class="tab-pane" id="pane-audit">
+    <div class="empty" id="au-empty">
+      <div class="empty-icon">🔐</div>
+      <h3>No audit entries yet</h3>
+      <p>Run the pipeline to see the cryptographic audit trail.</p>
+    </div>
+    <div id="au-data" style="display:none">
+      <div class="audit-header">
+        <div class="chain-indicator" id="chainIndicator"></div>
+        <span id="auditCount" style="font-family:var(--mono);font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div class="audit-list" id="auditList"></div>
+    </div>
+  </div>
+
+</div>
+</main>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+const state = { docId: null, results: [], audits: [] };
+
+// ── Server health check ───────────────────────────────────────────────────
+async function checkServer() {
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(2000) });
+    if (r.ok) {
+      setSrv(true);
+      return true;
+    }
+  } catch {}
+  setSrv(false);
+  return false;
+}
+function setSrv(ok) {
+  document.getElementById('srvDot').className = 'status-dot ' + (ok ? 'ok' : 'err');
+  document.getElementById('srvLabel').textContent = ok ? 'Server online' : 'Server offline';
+  document.getElementById('serverBadge').textContent = ok ? '● SERVER OK' : '● SERVER DOWN';
+  document.getElementById('serverBadge').className = 'badge ' + (ok ? 'ok' : 'err');
+}
+checkServer();
+setInterval(checkServer, 8000);
+
+// ── File drop / pick ──────────────────────────────────────────────────────
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fileIn');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f?.type === 'application/pdf') setFile(f);
+});
+fi.addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
+
+let _file = null;
+function setFile(f) {
+  _file = f;
+  dz.querySelector('h3').textContent = f.name.length > 24 ? f.name.slice(0,24)+'…' : f.name;
+  dz.querySelector('p').textContent = 'Click to change';
+  const chip = document.getElementById('fileChip');
+  chip.style.display = 'flex';
+  chip.innerHTML = `<div class="file-chip">📄 <span class="file-chip-name">${f.name}</span><span class="file-chip-size">${(f.size/1024).toFixed(1)}KB</span></div>`;
+  document.getElementById('runBtn').disabled = false;
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+function tab(name) {
+  const names = ['overview','chunks','index','results','audit'];
+  document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active', names[i]===name));
+  document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+  document.getElementById('pane-'+name).classList.add('active');
+}
+
+function step(id, st) { document.getElementById('s-'+id).className = 'step '+st; }
+
+// ── Run pipeline ──────────────────────────────────────────────────────────
+async function runPipeline() {
+  if (!_file) return;
+  const ok = await checkServer();
+  if (!ok) { alert('Server is offline.\nRun: uv run python server.py'); return; }
+
+  // Reset UI
+  ['triage','extract','chunk','index','ready'].forEach(s => step(s,'idle'));
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('runBtn').innerHTML = '<span class="spin"></span>Running…';
+  document.getElementById('ov-empty').style.display = 'none';
+  document.getElementById('ov-data').style.display = 'block';
+  document.getElementById('errBanner').style.display = 'none';
+
+  // Animate steps while waiting
+  const steps = ['triage','extract','chunk','index','ready'];
+  let si = 0;
+  const stepTimer = setInterval(() => {
+    if (si > 0) step(steps[si-1], 'done');
+    if (si < steps.length) step(steps[si], 'running');
+    si++;
+    if (si > steps.length) clearInterval(stepTimer);
+  }, 800);
+
+  try {
+    const fd = new FormData();
+    fd.append('file', _file);
+    const res = await fetch(`${API}/pipeline`, { method: 'POST', body: fd });
+    clearInterval(stepTimer);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+
+    const data = await res.json();
+    state.docId = data.doc_id;
+    state.audits = data.audit || [];
+
+    // Mark all done
+    steps.forEach(s => step(s,'done'));
+
+    // Show errors if any
+    if (data.errors?.length) {
+      const eb = document.getElementById('errBanner');
+      eb.style.display = 'block';
+      eb.textContent = '⚠ Pipeline warnings: ' + data.errors.join(' | ');
+    }
+
+    renderOverview(data);
+    renderChunks(data.chunks || []);
+    renderIndex(data.index);
+    renderAudit(data.audit || [], data.chain_valid, data.chain_msg);
+
+    document.getElementById('queryTxt').disabled = false;
+    document.getElementById('askBtn').disabled = false;
+    document.getElementById('runBtn').innerHTML = '✓ Done — Run Again';
+    document.getElementById('runBtn').disabled = false;
+
+    const cv = data.chain_valid;
+    document.getElementById('chainBadge').textContent = cv ? '⬡ CHAIN VALID' : '⬡ CHAIN BROKEN';
+    document.getElementById('chainBadge').className = 'badge ' + (cv ? 'ok' : 'err');
+
+  } catch(e) {
+    clearInterval(stepTimer);
+    steps.forEach(s => step(s,'idle'));
+    step('triage','error');
+    document.getElementById('runBtn').innerHTML = '▶ Run Pipeline';
+    document.getElementById('runBtn').disabled = false;
+    const eb = document.getElementById('errBanner');
+    eb.style.display = 'block';
+    eb.textContent = '❌ ' + e.message;
+  }
+}
+
+// ── Query ─────────────────────────────────────────────────────────────────
+async function submitQuery() {
+  const q = document.getElementById('queryTxt').value.trim();
+  if (!q || !state.docId) return;
+
+  document.getElementById('askBtn').disabled = true;
+  document.getElementById('askBtn').innerHTML = '<span class="spin"></span>Searching…';
+
+  try {
+    const res = await fetch(`${API}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doc_id: state.docId, question: q }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+    state.results.unshift({ q, ...data });
+    state.audits = data.audit || state.audits;
+    renderResults();
+    renderAudit(state.audits, data.chain_valid, '');
+    tab('results');
+    document.getElementById('queryTxt').value = '';
+  } catch(e) {
+    alert('Query failed: ' + e.message);
+  } finally {
+    document.getElementById('askBtn').disabled = false;
+    document.getElementById('askBtn').textContent = 'Ask Document →';
+  }
+}
+
+// ── Renderers ─────────────────────────────────────────────────────────────
+function renderOverview(data) {
+  const p = data.profile || {};
+  const s = data.stats || {};
+
+  const stratPill = { fast:'pill-green', layout:'pill-purple', vision:'pill-amber' };
+  const sp = stratPill[p.recommended_strategy] || 'pill-purple';
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card accent-purple" data-icon="📄">
+      <div class="stat-label">Pages</div>
+      <div class="stat-value">${p.page_count ?? '—'}</div>
+      <div class="stat-sub">${fmt(p.origin_type)}</div>
+    </div>
+    <div class="stat-card accent-green" data-icon="🧱">
+      <div class="stat-label">LDUs</div>
+      <div class="stat-value">${s.chunk_count ?? '—'}</div>
+      <div class="stat-sub">semantic chunks</div>
+    </div>
+    <div class="stat-card accent-amber" data-icon="💰">
+      <div class="stat-label">Est. Cost</div>
+      <div class="stat-value">$${Number(p.cost_estimate_usd||0).toFixed(4)}</div>
+      <div class="stat-sub">${p.recommended_strategy || ''} strategy</div>
+    </div>
+    <div class="stat-card accent-pink" data-icon="🏷️">
+      <div class="stat-label">Domain</div>
+      <div class="stat-value" style="font-size:18px;text-transform:capitalize">${p.domain_hint ?? '—'}</div>
+      <div class="stat-sub">${p.language ?? 'en'} · ${pct(p.language_confidence)} conf.</div>
+    </div>
+  `;
+
+  document.getElementById('profileGrid').innerHTML = `
+    <div class="profile-card">
+      <div class="profile-row"><span class="profile-key">doc_id</span><span class="profile-val" style="font-family:var(--mono);font-size:10px">${p.doc_id ?? ''}</span></div>
+      <div class="profile-row"><span class="profile-key">filename</span><span class="profile-val">${p.filename ?? ''}</span></div>
+      <div class="profile-row"><span class="profile-key">pages</span><span class="profile-val">${p.page_count ?? ''}</span></div>
+      <div class="profile-row"><span class="profile-key">language</span><span class="profile-val">${p.language ?? ''} (${pct(p.language_confidence)})</span></div>
+      <div class="profile-row"><span class="profile-key">strategy</span><span class="profile-val"><span class="pill ${sp}">${p.recommended_strategy ?? ''}</span></span></div>
+    </div>
+    <div class="profile-card">
+      <div class="profile-row"><span class="profile-key">domain_hint</span><span class="profile-val"><span class="pill pill-pink">${p.domain_hint ?? ''}</span></span></div>
+      <div class="profile-row"><span class="profile-key">origin_type</span><span class="profile-val">${fmt(p.origin_type)}</span></div>
+      <div class="profile-row"><span class="profile-key">layout</span><span class="profile-val">${fmt(p.layout_complexity)}</span></div>
+      <div class="profile-row"><span class="profile-key">has_tables</span><span class="profile-val">${p.has_tables ? '✓ yes' : '✗ no'}</span></div>
+      <div class="profile-row"><span class="profile-key">has_figures</span><span class="profile-val">${p.has_figures ? '✓ yes' : '✗ no'}</span></div>
+    </div>
+  `;
+
+  const costMax = 2.0;
+  const cost = Number(p.cost_estimate_usd || 0);
+  const pct_ = Math.min(100, (cost / costMax) * 100);
+  document.getElementById('costWrap').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;margin-bottom:4px">
+      <span style="color:var(--muted)">estimated cost</span>
+      <span style="color:var(--accent3)">$${cost.toFixed(4)}</span>
+    </div>
+    <div class="cost-bar-track"><div class="cost-bar-fill" style="width:${pct_}%"></div></div>
+    <div class="cost-labels"><span>$0.00</span><span>$${costMax.toFixed(2)} budget limit</span></div>
+  `;
+
+  document.getElementById('tbAudit').textContent = data.audit?.length || '';
+}
+
+function renderChunks(chunks) {
+  document.getElementById('ch-empty').style.display = chunks.length ? 'none' : 'flex';
+  document.getElementById('ch-data').style.display = chunks.length ? 'block' : 'none';
+  document.getElementById('tbChunks').textContent = chunks.length || '';
+
+  const typeClass = t => ({ text:'t-text', header:'t-header', table:'t-table', figure:'t-figure', list:'t-list' })[t] || 't-text';
+
+  document.getElementById('lduList').innerHTML = chunks.map((c, i) => `
+    <div class="ldu-item" style="animation-delay:${Math.min(i*0.03,0.5)}s">
+      <span class="type-badge ${typeClass(c.type)}">${c.type}</span>
+      <div class="ldu-body">
+        ${c.section ? `<strong>${esc(c.section)}</strong>` : ''}
+        ${esc(c.content)}
+        ${c.pii_redacted ? '<span class="pii-tag"> [PII REDACTED]</span>' : ''}
+      </div>
+      <div class="ldu-meta">
+        p.${c.page}<br>${c.tokens}tok<br>
+        <span style="color:var(--accent);font-size:9px">${c.content_hash}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderIndex(index) {
+  const sections = index?.sections || [];
+  document.getElementById('ix-empty').style.display = sections.length ? 'none' : 'flex';
+  document.getElementById('ix-data').style.display = sections.length ? 'block' : 'none';
+  document.getElementById('tbIndex').textContent = sections.length || '';
+
+  document.getElementById('indexList').innerHTML = sections.map((s, i) => `
+    <div class="index-node" style="animation-delay:${i*0.04}s">
+      <div class="index-node-hd">
+        <span class="index-node-title">${esc(s.title)}</span>
+        <span class="index-node-meta">pp. ${s.page_start}–${s.page_end} · ${s.ldu_count} LDUs</span>
+      </div>
+      ${s.summary ? `<div class="index-node-summary">${esc(s.summary)}</div>` : ''}
+      <div class="entity-tags">
+        ${(s.entities||[]).map(e => `<span class="entity-tag">${esc(e)}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderResults() {
+  document.getElementById('re-empty').style.display = state.results.length ? 'none' : 'flex';
+  document.getElementById('re-data').style.display = state.results.length ? 'block' : 'none';
+  document.getElementById('tbResults').textContent = state.results.length || '';
+
+  document.getElementById('resultsList').innerHTML = state.results.map(r => `
+    <div class="query-result">
+      <div class="query-q">Q: ${esc(r.q)}</div>
+      <div class="query-answer">${esc(r.answer || '')}</div>
+      ${(r.sources||[]).length ? `
+        <div class="sources">
+          ${r.sources.map((s,i) => `
+            <div class="source-item">
+              <div class="source-head">
+                <span class="pill pill-purple">Source ${i+1}</span>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">
+                  ${s.page_number ? `page ${s.page_number}` : ''}
+                </span>
+              </div>
+              ${s.excerpt ? `<div class="source-excerpt">"${esc(s.excerpt)}"</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+function renderAudit(entries, chainValid, chainMsg) {
+  document.getElementById('au-empty').style.display = entries.length ? 'none' : 'flex';
+  document.getElementById('au-data').style.display = entries.length ? 'block' : 'none';
+  document.getElementById('tbAudit').textContent = entries.length || '';
+  document.getElementById('auditCount').textContent = `${entries.length} entries`;
+
+  const cvEl = document.getElementById('chainIndicator');
+  const color = chainValid ? 'var(--accent2)' : 'var(--accent4)';
+  cvEl.innerHTML = `<div class="chain-dot" style="background:${color}"></div>
+    <span style="color:${color}">${chainValid ? 'CHAIN VALID' : 'CHAIN BROKEN'}</span>
+    ${chainMsg && !chainValid ? `<span style="color:var(--muted)">— ${chainMsg}</span>` : ''}`;
+
+  document.getElementById('chainBadge').textContent = chainValid ? '⬡ CHAIN VALID' : '⬡ CHAIN BROKEN';
+  document.getElementById('chainBadge').className = 'badge ' + (chainValid ? 'ok' : 'err');
+
+  const evClass = ev => {
+    if (ev.includes('PASS') || ev.includes('APPROVED')) return 'ev-pass';
+    if (ev.includes('BLOCK') || ev.includes('VIOLATION')) return 'ev-block';
+    if (ev.includes('WARN') || ev.includes('ESCALATE')) return 'ev-warn';
+    return 'ev-info';
+  };
+
+  document.getElementById('auditList').innerHTML = entries.map(e => {
+    const ev = e.event || e.event_type || '';
+    const payload = e.payload ? JSON.stringify(e.payload).slice(0, 100) : '';
+    const ts = e.timestamp ? e.timestamp.replace('T',' ').slice(0,19) : '';
+    return `<div class="audit-row">
+      <span class="audit-ts">${ts}</span>
+      <div>
+        <span class="audit-ev ${evClass(ev)}">${ev}</span>
+        ${payload ? `<div class="audit-payload">${esc(payload)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+const fmt = s => (s || '').replace(/_/g,' ');
+const pct = v => v != null ? (Number(v)*100).toFixed(1)+'%' : '—';
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+</script>
+</body>
+</html>
