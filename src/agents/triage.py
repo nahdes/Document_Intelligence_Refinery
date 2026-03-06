@@ -34,11 +34,15 @@ def _load_domain_keywords(config_path: str = "rubric/extraction_rules.yaml") -> 
     except Exception:
         pass
     return {
-        "financial": ["balance sheet", "revenue", "ebitda", "audit", "income statement",
+        "financial": ["balance sheet", "revenue", "ebitda", "income statement",
                       "cash flow", "net profit", "fiscal year", "quarterly earnings", "dividend",
-                      "equity", "amortization"],
-        "legal": ["plaintiff", "defendant", "herein", "contract", "liability", "jurisdiction",
-                  "indemnification", "arbitration", "affidavit", "litigation", "statute", "injunction"],
+                      "equity", "amortization", "tax expenditure", "customs duty", "gdp",
+                      "import tax", "excise", "vat", "surtax", "budget", "expenditure",
+                      "tax revenue", "ministry of finance", "fiscal", "tariff",
+                      "cif value", "forgone"],
+        "legal": ["plaintiff", "defendant", "herein", "indemnification",
+                  "arbitration", "affidavit", "litigation", "injunction",
+                  "court order", "legal proceedings", "tort", "subpoena"],
         "technical": ["architecture", "api", "deployment", "specification", "infrastructure",
                       "microservice", "algorithm", "database", "latency", "throughput",
                       "authentication", "endpoint"],
