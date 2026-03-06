@@ -38,6 +38,11 @@ from src.strategies.fast_text import FastTextExtractor
 from src.strategies.layout import LayoutExtractor
 from src.strategies.vision import VisionExtractor
 
+def _ev(val) -> str:
+    """Safe .value for both enum instances and plain strings (use_enum_values=True)."""
+    return val.value if hasattr(val, 'value') else str(val)
+
+
 logger = logging.getLogger(__name__)
 
 LEDGER_PATH = Path(".refinery/extraction_ledger.jsonl")
@@ -49,6 +54,86 @@ _ESCALATION_CHAIN: dict[str, str | None] = {
     "vision": None,   # terminal — route to human_in_loop
 }
 
+
+
+def _bridge_doc(raw_doc, profile, strategy: ExtractionStrategy, cost_usd: float):
+    """
+    Convert src.models.document.ExtractedDocument (returned by strategy implementations)
+    into src.models.schemas.ExtractedDocument (required by ChunkingEngine / router logic).
+    """
+    from src.models.schemas import (
+        ExtractedDocument as SchemasDoc,
+        TextBlock as SchemasTextBlock,
+        ExtractedTable as SchemasTable,
+        BoundingBox,
+    )
+    import uuid
+
+    # Convert text blocks
+    text_blocks = []
+    for b in getattr(raw_doc, "text_blocks", []):
+        raw_bbox = getattr(b, "bbox", None)
+        bbox = None
+        if raw_bbox is not None:
+            try:
+                bbox = BoundingBox(
+                    x0=float(getattr(raw_bbox, "x0", 0)),
+                    y0=float(getattr(raw_bbox, "y0", 0)),
+                    x1=float(getattr(raw_bbox, "x1", 0)),
+                    y1=float(getattr(raw_bbox, "y1", 0)),
+                    page=int(getattr(raw_bbox, "page", 1)),
+                )
+            except Exception:
+                bbox = None
+        text_blocks.append(SchemasTextBlock(
+            text=str(b.text),
+            bbox=bbox,
+            reading_order=int(getattr(b, "reading_order", 0)),
+            page=int(getattr(raw_bbox, "page", 1)) if raw_bbox else 1,
+            font_name=getattr(b, "font_name", None),
+            font_size=getattr(b, "font_size", None),
+        ))
+
+    # Convert tables
+    tables = []
+    for t in getattr(raw_doc, "tables", []):
+        headers = list(getattr(t, "headers", []))
+        rows = [list(r) for r in getattr(t, "rows", [])]
+        if headers and rows:
+            raw_bbox = getattr(t, "bbox", None)
+            bbox = None
+            if raw_bbox is not None:
+                try:
+                    bbox = BoundingBox(
+                        x0=float(getattr(raw_bbox, "x0", 0)),
+                        y0=float(getattr(raw_bbox, "y0", 0)),
+                        x1=float(getattr(raw_bbox, "x1", 0)),
+                        y1=float(getattr(raw_bbox, "y1", 0)),
+                        page=int(getattr(raw_bbox, "page", 1)),
+                    )
+                except Exception:
+                    bbox = None
+            tables.append(SchemasTable(
+                headers=headers,
+                rows=rows,
+                bbox=bbox,
+                page=int(getattr(t, "page", 1)),
+                caption=getattr(t, "caption", None),
+            ))
+
+    # Build full_text from all text blocks
+    full_text = "\n".join(b.text for b in text_blocks if b.text.strip())
+
+    return SchemasDoc(
+        doc_id=str(getattr(raw_doc, "doc_id", profile.doc_id)),
+        source_profile=profile,
+        strategy_used=strategy,
+        text_blocks=text_blocks,
+        tables=tables,
+        full_text=full_text,
+        confidence_score=float(getattr(raw_doc, "confidence_score", 0.8)),
+        cost_estimate_usd=cost_usd,
+    )
 
 class ExtractionRouter:
     """
@@ -86,8 +171,21 @@ class ExtractionRouter:
           - profile.layout_complexity    (logged in routing decision)
           - profile.estimated_cost_usd   (logged in routing decision)
         """
-        initial_strategy = profile.recommended_strategy
-        strategy         = initial_strategy
+        # Normalise recommended_strategy: TriageAgent returns "A"/"B"/"C" strings,
+        # ExtractionRouter needs ExtractionStrategy enum. profile.use_enum_values=True
+        # means assigning enum back would strip to string — keep local variable only.
+        _raw = profile.recommended_strategy
+        _letter_map = {"A": ExtractionStrategy.FAST, "B": ExtractionStrategy.LAYOUT, "C": ExtractionStrategy.VISION}
+        if isinstance(_raw, ExtractionStrategy):
+            initial_strategy = _raw
+        elif str(_raw).upper() in _letter_map:
+            initial_strategy = _letter_map[str(_raw).upper()]
+        else:
+            try:
+                initial_strategy = ExtractionStrategy(str(_raw).lower())
+            except ValueError:
+                initial_strategy = ExtractionStrategy.FAST
+        strategy = initial_strategy
         max_retries      = self.ces.policy_engine.policy.max_escalation_retries
         escalation_count = 0
         t0               = time.time()
@@ -99,25 +197,25 @@ class ExtractionRouter:
         logger.info(
             "ExtractionRouter START: doc=%s origin=%s layout=%s cost_tier=%s "
             "initial_strategy=%s",
-            profile.doc_id, profile.origin_type.value,
-            profile.layout_complexity.value, profile.cost_tier,
-            initial_strategy.value,
+            profile.doc_id, str(profile.origin_type),
+            str(profile.layout_complexity), getattr(profile, "cost_tier", str(profile.recommended_strategy)),
+            _ev(initial_strategy),
         )
 
         while True:
             # ── Gate 3a: cost budget check (pre-extraction) ───────────────
             cost_result = self.ces.gate_extract(
                 doc_id=profile.doc_id,
-                strategy=strategy.value,
+                strategy=_ev(strategy),
                 page_count=profile.page_count,
             )
             if not cost_result.passed:
                 logger.warning(
                     "ExtractionRouter: BUDGET BLOCK strategy=%s doc=%s (%s)",
-                    strategy.value, profile.doc_id, cost_result.violation_detail,
+                    _ev(strategy), profile.doc_id, cost_result.violation_detail,
                 )
                 all_attempts.append({
-                    "strategy": strategy.value,
+                    "strategy": _ev(strategy),
                     "status": "budget_blocked",
                     "reason": cost_result.violation_detail,
                     "confidence": 0.0,
@@ -131,10 +229,10 @@ class ExtractionRouter:
             # ── Run extraction strategy ───────────────────────────────────
             attempt_start = time.time()
             attempt: dict = {
-                "strategy":   strategy.value,
-                "origin":     profile.origin_type.value,
-                "layout":     profile.layout_complexity.value,
-                "cost_tier":  profile.cost_tier,
+                "strategy":   _ev(strategy),
+                "origin":     str(profile.origin_type),
+                "layout":     str(profile.layout_complexity),
+                "cost_tier":  getattr(profile, "cost_tier", str(profile.recommended_strategy)),
                 "cost_usd":   cost_result.cost_approved_usd,
                 "threshold":  None,   # filled after gate_confidence
                 "confidence": 0.0,
@@ -143,13 +241,17 @@ class ExtractionRouter:
             }
 
             try:
-                doc = self._strategies[strategy].extract(file_path, profile)
+                raw_doc = self._strategies[strategy].extract(file_path)
+                doc = _bridge_doc(
+                    raw_doc, profile, strategy,
+                    cost_result.cost_approved_usd,
+                )
                 attempt["confidence"] = doc.confidence_score
                 attempt["status"]     = "ok"
             except Exception as exc:
                 logger.error(
                     "ExtractionRouter: strategy=%s FAILED for doc=%s: %s",
-                    strategy.value, profile.doc_id, exc,
+                    _ev(strategy), profile.doc_id, exc,
                 )
                 doc = ExtractedDocument(
                     doc_id=profile.doc_id,
@@ -170,7 +272,7 @@ class ExtractionRouter:
             # ── Gate 3b: confidence check (post-extraction) ───────────────
             conf_result = self.ces.gate_confidence(
                 doc_id=profile.doc_id,
-                strategy=strategy.value,
+                strategy=_ev(strategy),
                 confidence=doc.confidence_score,
             )
             # Threshold comes from CES policy engine — fill into attempt log
@@ -180,7 +282,7 @@ class ExtractionRouter:
             logger.info(
                 "ExtractionRouter: strategy=%s confidence=%.3f threshold=%.3f "
                 "passed=%s escalate_to=%s",
-                strategy.value, doc.confidence_score, threshold,
+                _ev(strategy), doc.confidence_score, threshold,
                 conf_result.passed, conf_result.escalation_target or "—",
             )
 
@@ -199,7 +301,7 @@ class ExtractionRouter:
                 logger.info(
                     "ExtractionRouter COMPLETE: doc=%s final_strategy=%s "
                     "confidence=%.3f cost=$%.4f escalations=%d [%.2fs]",
-                    profile.doc_id, strategy.value, doc.confidence_score,
+                    profile.doc_id, _ev(strategy), doc.confidence_score,
                     doc.cost_estimate_usd, escalation_count,
                     doc.processing_time_s,
                 )
@@ -230,7 +332,7 @@ class ExtractionRouter:
             next_strategy_str = conf_result.escalation_target
             logger.info(
                 "ExtractionRouter: ESCALATE %s → %s (confidence=%.3f < %.3f)",
-                strategy.value, next_strategy_str,
+                _ev(strategy), next_strategy_str,
                 doc.confidence_score, threshold,
             )
             strategy = ExtractionStrategy(next_strategy_str)
@@ -262,7 +364,7 @@ class ExtractionRouter:
             "ExtractionRouter DEGRADED: doc=%s — human review required. "
             "Best confidence=%.3f via %s after %d escalations.",
             profile.doc_id, best_doc.confidence_score,
-            best_doc.strategy_used.value, escalation_count,
+            _ev(best_doc.strategy_used), escalation_count,
         )
         return best_doc
 
