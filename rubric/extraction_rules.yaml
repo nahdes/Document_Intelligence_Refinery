@@ -22,6 +22,12 @@ domain_classification:
       - "audit"
       - "income statement"
       - "cash flow"
+      - "net profit"
+      - "fiscal year"
+      - "quarterly earnings"
+      - "dividend"
+      - "equity"
+      - "amortization"
     legal:
       - "plaintiff"
       - "defendant"
@@ -29,6 +35,12 @@ domain_classification:
       - "contract"
       - "liability"
       - "jurisdiction"
+      - "indemnification"
+      - "arbitration"
+      - "affidavit"
+      - "litigation"
+      - "statute"
+      - "injunction"
     technical:
       - "architecture"
       - "api"
@@ -36,6 +48,12 @@ domain_classification:
       - "specification"
       - "infrastructure"
       - "microservice"
+      - "algorithm"
+      - "database"
+      - "latency"
+      - "throughput"
+      - "authentication"
+      - "endpoint"
     medical:
       - "diagnosis"
       - "patient"
@@ -43,6 +61,12 @@ domain_classification:
       - "clinical"
       - "treatment"
       - "protocol"
+      - "prognosis"
+      - "symptoms"
+      - "dosage"
+      - "pathology"
+      - "contraindication"
+      - "etiology"
 
 # ── Chunking Constitution ──
 chunking_rules:
