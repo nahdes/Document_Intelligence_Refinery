@@ -23,6 +23,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 
+from src.core.policy_engine import PolicyViolation
+
 logger = logging.getLogger(__name__)
 
 # Optional heavy dependencies — graceful degradation if not installed
@@ -146,8 +148,12 @@ class MalwareScanner:
     def _signature_scan(self, file_bytes: bytes, doc_id: str) -> None:
         for sig in MALWARE_SIGNATURES:
             if sig in file_bytes:
-                raise SecurityViolation("signature_match",
+                raise SecurityViolation("eicar_signature",
                     f"Known malware signature detected", doc_id)
+        # Detect embedded EXE (MZ header) inside non-EXE files
+        if file_bytes[:2] != b"MZ" and b"MZ" in file_bytes[4:]:
+            raise SecurityViolation("heuristic",
+                "Embedded executable (MZ) detected in file", doc_id)
 
     def _heuristic_scan(self, file_bytes: bytes, doc_id: str) -> None:
         for pattern in SUSPICIOUS_PATTERNS:
@@ -181,7 +187,7 @@ class FileTypeValidator:
     def validate(self, file_bytes: bytes, filename: str = "", doc_id: str = "") -> str:
         mime = self.detect_mime(file_bytes)
         if mime not in ALLOWED_MIME_TYPES:
-            raise SecurityViolation("file_type",
+            raise SecurityViolation("file_type_validation",
                 f"File type '{mime}' is not allowed. Filename: {filename!r}", doc_id)
         return mime
 
@@ -220,21 +226,32 @@ class PIIRedactor:
             text=text, entities=self.entities, language="en"
         )
         if not results:
-            return text, []
+            # Fall back to regex for what Presidio missed
+            return self._regex_redact(text, doc_id)
         anonymized = self._presidio_anonymizer.anonymize(
             text=text,
             analyzer_results=results,
             operators={"DEFAULT": OperatorConfig("replace", {"new_value": "<REDACTED>"})},
         )
-        records = [{"entity": r.entity_type, "start": r.start, "end": r.end, "doc_id": doc_id}
+        records = [{"entity_type": r.entity_type, "entity": r.entity_type,
+                    "start": r.start, "end": r.end, "doc_id": doc_id}
                    for r in results]
-        return anonymized.text, records
+        # Also apply regex SSN fallback in case Presidio missed it
+        redacted_text = anonymized.text
+        ssn_pattern = PII_REGEX_PATTERNS[2][1]  # SSN is index 2
+        if ssn_pattern.search(redacted_text):
+            for m in ssn_pattern.finditer(redacted_text):
+                records.append({"entity_type": "US_SSN", "entity": "SSN",
+                                 "start": m.start(), "end": m.end(), "doc_id": doc_id})
+            redacted_text = ssn_pattern.sub("<REDACTED>", redacted_text)
+        return redacted_text, records
 
     def _regex_redact(self, text: str, doc_id: str) -> tuple[str, list[dict]]:
         records: list[dict] = []
         for label, pattern in PII_REGEX_PATTERNS:
             for m in pattern.finditer(text):
-                records.append({"entity": label, "start": m.start(), "end": m.end(), "doc_id": doc_id})
+                records.append({"entity_type": label, "entity": label,
+                                 "start": m.start(), "end": m.end(), "doc_id": doc_id})
             text = pattern.sub("<REDACTED>", text)
         return text, records
 
@@ -308,10 +325,14 @@ class AuditLedger:
 
     _LEDGER_PATH = Path(".refinery/audit_ledger.jsonl")
 
-    def __init__(self, ledger_path: Path | None = None) -> None:
-        self._path = ledger_path or self._LEDGER_PATH
+    def __init__(self, ledger_path: Path | None = None, path: Path | None = None) -> None:
+        self._path = path or ledger_path or self._LEDGER_PATH
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._prev_hash = self._compute_chain_tip()
+
+    @property
+    def path(self) -> Path:
+        return self._path
 
     def _compute_chain_tip(self) -> str:
         """SHA-256 of the entire current ledger file (genesis = 64 zeros)."""
@@ -339,24 +360,38 @@ class AuditLedger:
         logger.debug("Audit ledger: %s event recorded (%s)", event_type, entry_hash[:12])
         return entry_hash
 
-    def verify_chain(self) -> bool:
-        """Verify ledger integrity. Returns True if chain is unbroken."""
+    def read_all(self) -> list[dict]:
+        """Return all entries as a list of dicts."""
         if not self._path.exists():
-            return True
+            return []
+        lines = self._path.read_text().splitlines()
+        entries = [json.loads(line) for line in lines if line.strip()]
+        # Add 'event' as alias for 'event_type' for test compatibility
+        for e in entries:
+            if "event_type" in e and "event" not in e:
+                e["event"] = e["event_type"]
+        return entries
+
+    def verify_chain(self) -> tuple[bool, str]:
+        """Verify ledger integrity. Returns (True, 'ok') if chain is unbroken."""
+        if not self._path.exists():
+            return True, "ok"
         lines = self._path.read_text().splitlines()
         prev = "0" * 64
         for line in lines:
             entry = json.loads(line)
             if entry.get("prev_hash") != prev:
-                logger.error("Audit ledger chain broken at entry %s", entry.get("event_id"))
-                return False
+                msg = f"Chain broken at entry {entry.get('event_id')}"
+                logger.error("Audit ledger %s", msg)
+                return False, msg
             body = {k: v for k, v in entry.items() if k != "entry_hash"}
             expected = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
             if entry.get("entry_hash") != expected:
-                logger.error("Audit ledger entry hash mismatch at %s", entry.get("event_id"))
-                return False
+                msg = f"Hash mismatch at {entry.get('event_id')}"
+                logger.error("Audit ledger %s", msg)
+                return False, msg
             prev = entry["entry_hash"]
-        return True
+        return True, "ok"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -395,12 +430,12 @@ class SecurityGate:
     Must pass before any extraction begins.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, ledger: "AuditLedger | None" = None) -> None:
         self.scanner = MalwareScanner()
         self.validator = FileTypeValidator()
         self.redactor = PIIRedactor()
         self.encryptor = EncryptionManager()
-        self.ledger = AuditLedger()
+        self.ledger = ledger or AuditLedger()
 
     def ingest(self, file_bytes: bytes, filename: str, doc_id: str = "") -> dict[str, Any]:
         """
@@ -409,6 +444,13 @@ class SecurityGate:
         """
         doc_id = sanitize_doc_id(doc_id or Path(filename).stem)
         t0 = time.time()
+
+        # 0. File size check
+        size_mb = len(file_bytes) / (1024 ** 2)
+        max_mb = 10.0
+        if size_mb > max_mb:
+            raise PolicyViolation("max_file_size_mb",
+                f"file is {size_mb:.1f} MB, limit is {max_mb:.1f} MB", doc_id)
 
         # 1. File type validation
         mime = self.validator.validate(file_bytes, filename, doc_id)
