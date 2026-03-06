@@ -1,0 +1,31 @@
+{
+  "doc_id": "8cd9d076-5359-4a4a-9524-586cc1454871",
+  "filename": "cbe_annual_report_2023.pdf",
+  "total_pages": 48,
+  "root_sections": [
+    {
+      "node_id": "f18843e5-0799-43cc-90ac-98309663bfd6",
+      "title": "Financial Highlights",
+      "page_start": 4,
+      "page_end": 4,
+      "level": 1,
+      "child_sections": [],
+      "summary": "Financial Highlights Capital Adequacy Ratio 14.8%, above 8% minimum. NPL ratio 3.2%.",
+      "key_entities": [
+        "Financial Highlights",
+        "Total Assets",
+        "Net Profit",
+        "Capital Adequacy Ratio"
+      ],
+      "data_types_present": [
+        "tables"
+      ],
+      "ldu_ids": [
+        "556b73f0-4818-47c0-8845-a306b087eba8",
+        "aa1bc33c-c29a-4058-9c72-01a081bd8b9c",
+        "df0e2130-245f-46dd-8c65-d99d5d96d958"
+      ]
+    }
+  ],
+  "built_at": "2026-03-06T05:03:36.657592Z"
+}
