@@ -23,6 +23,33 @@ from src.models.profile import DocumentProfile, OriginType, LayoutComplexity, Do
 DetectorFactory.seed = 0
 
 
+def _load_domain_keywords(config_path: str = "rubric/extraction_rules.yaml") -> Dict[str, List[str]]:
+    """Load domain keywords from config file at module level."""
+    try:
+        p = Path(config_path)
+        if p.exists():
+            with open(p) as f:
+                cfg = yaml.safe_load(f) or {}
+            return cfg.get("domain_classification", {}).get("keywords", {})
+    except Exception:
+        pass
+    return {
+        "financial": ["balance sheet", "revenue", "ebitda", "audit", "income statement",
+                      "cash flow", "net profit", "fiscal year", "quarterly earnings", "dividend",
+                      "equity", "amortization"],
+        "legal": ["plaintiff", "defendant", "herein", "contract", "liability", "jurisdiction",
+                  "indemnification", "arbitration", "affidavit", "litigation", "statute", "injunction"],
+        "technical": ["architecture", "api", "deployment", "specification", "infrastructure",
+                      "microservice", "algorithm", "database", "latency", "throughput",
+                      "authentication", "endpoint"],
+        "medical": ["diagnosis", "patient", "prescription", "clinical", "treatment", "protocol",
+                    "prognosis", "symptoms", "dosage", "pathology", "contraindication", "etiology"],
+    }
+
+
+DOMAIN_KEYWORDS: Dict[str, List[str]] = _load_domain_keywords()
+
+
 class TriageAgent:
     """
     Document profiling agent that classifies documents before extraction.
@@ -30,7 +57,8 @@ class TriageAgent:
     All thresholds and keywords loaded from config (Rubric: Externalized).
     """
 
-    def __init__(self, config_path: str = "rubric/extraction_rules.yaml"):
+    def __init__(self, config_path: str = "rubric/extraction_rules.yaml",
+                 ces=None, profiles_dir=None):
         """Initialize with externalized configuration."""
         self.config_path = Path(config_path)
         self.config = self._load_config()
@@ -46,6 +74,8 @@ class TriageAgent:
             "B": self.config.get('cost_tiers', {}).get('strategy_b', 0.005),
             "C": self.config.get('cost_tiers', {}).get('strategy_c', 0.020),
         }
+        self.ces = ces
+        self.profiles_dir = Path(profiles_dir) if profiles_dir else None
 
     def _load_config(self) -> Dict:
         """Load configuration from YAML file."""
@@ -252,7 +282,24 @@ class TriageAgent:
         # Strategy B: Layout-aware (everything else)
         return "B", self.cost_tiers["B"]
 
-    def analyze(self, file_path: str) -> DocumentProfile:
+    def profile(self, file_path) -> "DocumentProfile":
+        """Run security gates then analyze — used by tests and pipeline."""
+        file_path_obj = Path(file_path)
+        file_bytes = file_path_obj.read_bytes()
+        if self.ces is not None:
+            self.ces.gate_ingest(file_bytes, file_path_obj.name)
+        result = self.analyze(str(file_path))
+        if self.ces is not None:
+            self.ces.gate_triage(
+                result.doc_id,
+                len(file_bytes),
+                result.page_count,
+                result.language,
+                result.language_confidence,
+            )
+        return result
+
+    def analyze(self, file_path: str) -> "DocumentProfile":
         """
         Complete document analysis pipeline.
         
