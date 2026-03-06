@@ -34,9 +34,9 @@ from src.models.schemas import (
     ExtractedDocument,
     RoutingDecision,
 )
-from src.strategies.fast_extractor import FastTextExtractor
-from src.strategies.layout_extractor import LayoutExtractor
-from src.strategies.vision_extractor import VisionExtractor
+from src.strategies.fast_text import FastTextExtractor
+from src.strategies.layout import LayoutExtractor
+from src.strategies.vision import VisionExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +64,9 @@ class ExtractionRouter:
     def __init__(self, ces: Optional[ConstraintEnforcementSystem] = None) -> None:
         self.ces = ces or ConstraintEnforcementSystem()
         self._strategies = {
-            ExtractionStrategy.FAST:   FastTextExtractor(self.ces.policy_engine),
-            ExtractionStrategy.LAYOUT: LayoutExtractor(self.ces.policy_engine),
-            ExtractionStrategy.VISION: VisionExtractor(self.ces.policy_engine),
+            ExtractionStrategy.FAST:   FastTextExtractor(),
+            ExtractionStrategy.LAYOUT: LayoutExtractor(),
+            ExtractionStrategy.VISION: VisionExtractor(),
         }
         LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
 
