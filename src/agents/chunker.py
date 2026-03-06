@@ -59,7 +59,7 @@ class ChunkingEngine:
         # Step 2: Text blocks
         current_section: Optional[str] = None
         for block in doc.text_blocks:
-            if block.is_header or (block.font_size >= 14.0 and len(block.text) < 120):
+            if block.is_header or ((block.font_size or 0) >= 14.0 and len(block.text) < 120):
                 current_section = block.text.strip()
                 hdr = LDU(
                     doc_id=doc.doc_id, chunk_type=ChunkType.HEADER,
