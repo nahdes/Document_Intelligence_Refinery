@@ -49,6 +49,8 @@ class BudgetExceededError(PolicyViolation):
             detail=f"cost ${cost:.4f} > limit ${limit:.4f}",
             doc_id=doc_id,
         )
+        self.cost = cost
+        self.limit = limit
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -122,7 +124,7 @@ class RefineryPolicy(BaseModel):
         if not (self.strategy_a_cost_per_page
                 < self.strategy_b_cost_per_page
                 < self.strategy_c_cost_per_page):
-            raise ValueError("Cost per page must satisfy: strategy_a < strategy_b < strategy_c")
+            raise ValueError("Cost hierarchy violated: strategy_a < strategy_b < strategy_c")
         return self
 
 
@@ -136,17 +138,24 @@ class RefineryPolicyEngine:
     _DEFAULT_POLICY_PATH = Path("rubric/policies.yaml")
 
     def __init__(self, policy_path: Path | None = None) -> None:
-        path = policy_path or self._DEFAULT_POLICY_PATH
-        self.policy = self._load_policy(path)
-        logger.info("RefineryPolicyEngine loaded from %s", path)
+        self._policy_path = policy_path or self._DEFAULT_POLICY_PATH
+        self.policy = self._load_policy(self._policy_path)
+        logger.info("RefineryPolicyEngine loaded from %s", self._policy_path)
+
+    def reload(self) -> None:
+        """Hot-reload policy from disk."""
+        self.policy = self._load_policy(self._policy_path)
+        logger.info("RefineryPolicyEngine reloaded from %s", self._policy_path)
 
     @staticmethod
     def _load_policy(path: Path) -> RefineryPolicy:
-        if path.exists():
-            with open(path) as f:
-                data = yaml.safe_load(f) or {}
-            return RefineryPolicy(**data)
-        logger.warning("Policy file %s not found — using defaults.", path)
+        try:
+            if path.exists():
+                with open(path) as f:
+                    data = yaml.safe_load(f) or {}
+                return RefineryPolicy(**data)
+        except Exception as exc:
+            logger.warning("Failed to load policy from %s (%s) — using defaults.", path, exc)
         return RefineryPolicy()
 
     # ── Enforcement helpers ────────────────────────────────────────────────────
@@ -184,7 +193,7 @@ class RefineryPolicyEngine:
             "layout": self.policy.strategy_b_cost_per_page,
             "vision": self.policy.strategy_c_cost_per_page,
         }
-        return costs.get(strategy, self.policy.strategy_c_cost_per_page) * page_count
+        return costs.get(strategy, self.policy.strategy_b_cost_per_page) * page_count
 
     def validate_chunk(self, chunk: dict[str, Any]) -> None:
         rules = self.policy.chunk_rules
