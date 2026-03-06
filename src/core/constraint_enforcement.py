@@ -266,13 +266,17 @@ class ConstraintEnforcementSystem:
         stage = "CHUNK"
         try:
             self.policy_engine.validate_chunk(chunk)
-            return EnforcementResult(stage=stage, passed=True, doc_id=doc_id)
+            result = EnforcementResult(stage=stage, passed=True, doc_id=doc_id)
+            self._audit(stage, "PASS", doc_id,
+                        {"chunk_type": chunk.get("chunk_type"), "token_count": chunk.get("token_count")})
+            return result
 
         except PolicyViolation as exc:
             result = EnforcementResult(
                 stage=stage, passed=False, doc_id=doc_id,
                 violation_rule=exc.rule, violation_detail=exc.detail,
             )
+            self._audit(stage, "BLOCK", doc_id, {"rule": exc.rule, "detail": exc.detail})
             logger.warning("CES CHUNK VIOLATION: %s", result)
             return result
 
@@ -382,6 +386,11 @@ class ConstraintEnforcementSystem:
                 "propagate_headers": p.chunk_rules.propagate_section_headers,
             },
             "escalation_chain": self.ESCALATION_CHAIN,
+            "strategy_costs": {
+                "fast": p.strategy_a_cost_per_page,
+                "layout": p.strategy_b_cost_per_page,
+                "vision": p.strategy_c_cost_per_page,
+            },
         }
 
     # ── Internal ──────────────────────────────────────────────────────────────
